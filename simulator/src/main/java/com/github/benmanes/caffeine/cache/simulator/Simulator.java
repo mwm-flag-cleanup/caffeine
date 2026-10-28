@@ -22,6 +22,7 @@ import static java.util.Objects.requireNonNull;
 import static java.util.stream.Gatherers.windowFixed;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -29,6 +30,13 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Stream;
 
+import io.rollout.context.Context;
+import io.rollout.context.RoxContext;
+
+import com.github.benmanes.caffeine.cache.simulator.fm.ConsoleSummaryPrinter;
+import com.github.benmanes.caffeine.cache.simulator.fm.FeatureFlags;
+import com.github.benmanes.caffeine.cache.simulator.fm.SimulationSummary;
+import com.github.benmanes.caffeine.cache.simulator.fm.TraceSampleDiagnostics;
 import com.github.benmanes.caffeine.cache.simulator.parser.ClairvoyantTraceReader;
 import com.github.benmanes.caffeine.cache.simulator.parser.TraceReader;
 import com.github.benmanes.caffeine.cache.simulator.policy.AccessEvent;
@@ -64,6 +72,8 @@ import com.typesafe.config.ConfigFactory;
  * @author ben.manes@gmail.com (Ben Manes)
  */
 public final class Simulator {
+  private static final Logger logger = Logger.getLogger(Simulator.class.getName());
+
   private final BasicSettings settings;
 
   public Simulator(Config config) {
@@ -89,10 +99,21 @@ public final class Simulator {
 
   private void broadcast(TraceReader trace, List<PolicyActor> policies) {
     int batchSize = settings.actor().batchSize();
+    Context flagContext = new RoxContext.Builder().from(Map.of("policyCount", policies.size()));
+    boolean evaluateInParallel = FeatureFlags.FLAGS.enableParallelPolicyEvaluation.isEnabled(flagContext)
+        && (policies.size() > 1);
+    FeatureFlags.FLAGS.enableParallelPolicyEvaluation
+        .enabled(() -> logger.fine(
+            () -> "Evaluating " + policies.size() + " policies concurrently"), flagContext)
+        .disabled(() -> logger.fine("Evaluating policies sequentially"), flagContext);
     try (Stream<AccessEvent> events = window(trace)) {
       events.gather(windowFixed(batchSize)).forEachOrdered(batch -> {
-        for (var policy : policies) {
-          policy.send(batch);
+        if (evaluateInParallel) {
+          policies.parallelStream().forEach(policy -> policy.send(batch));
+        } else {
+          for (var policy : policies) {
+            policy.send(batch);
+          }
         }
       });
       var futures = policies.stream().map(policy -> {
@@ -107,6 +128,13 @@ public final class Simulator {
     var reporter = settings.report().format().create(settings.config(), trace.characteristics());
     var results = policies.stream().map(PolicyActor::stats).collect(toImmutableList());
     reporter.print(results);
+
+    SimulationSummary.print(results);
+    ConsoleSummaryPrinter.printCompletionNotice();
+    if (!results.isEmpty()) {
+      var first = results.getFirst();
+      TraceSampleDiagnostics.logEffectiveSampleSize(first.hitCount() + first.missCount());
+    }
   }
 
   /** Returns the trace events, windowed by the configured skip and limit. */
@@ -182,6 +210,7 @@ public final class Simulator {
 
   static void main() {
     Logger.getLogger("").setLevel(Level.WARNING);
+    FeatureFlags.init();
     var simulator = new Simulator(ConfigFactory.load());
     var stopwatch = Stopwatch.createStarted();
     simulator.run();

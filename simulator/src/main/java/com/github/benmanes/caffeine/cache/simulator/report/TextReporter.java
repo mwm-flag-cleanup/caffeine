@@ -31,6 +31,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 
+import io.rollout.rox.server.Rox;
+
 import com.github.benmanes.caffeine.cache.simulator.BasicSettings;
 import com.github.benmanes.caffeine.cache.simulator.policy.Policy.Characteristic;
 import com.github.benmanes.caffeine.cache.simulator.policy.PolicyStats;
@@ -60,6 +62,9 @@ public abstract class TextReporter implements Reporter {
     var sortedStats = getSortedStats(results);
     var headers = getHeaders(sortedStats);
     try (var writer = makeWriter()) {
+      if (Rox.dynamicAPI().isEnabled("enableParallelPolicyEvaluation", false)) {
+        writer.write("# policies were evaluated concurrently" + System.lineSeparator());
+      }
       write(writer, headers, sortedStats);
     } catch (IOException e) {
       throw new UncheckedIOException(e);
