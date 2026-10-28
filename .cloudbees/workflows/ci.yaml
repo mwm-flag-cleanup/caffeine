@@ -23,17 +23,35 @@ jobs:
       # own Gradle toolchain resolver (foojay-resolver-convention) downloads
       # whatever JDK the build actually needs for compilation; this image
       # only needs a JDK new enough to run Gradle 9 itself.
+      # Every ./gradlew invocation below is wrapped in a retry loop: settings
+      # evaluation resolves the com.gradle.develocity plugin (and its
+      # transitive gradle-versions-plugin -> moshi-kotlin dependency) from
+      # Maven Central on every fresh run, regardless of which task is
+      # targeted, and CI has been observed hitting a transient
+      # "429 Too Many Requests" from Maven Central during that resolution.
+      # Retrying with backoff rides out the rate limit rather than failing
+      # the whole job on what isn't a real build/test problem.
       - name: Compile
         uses: docker://eclipse-temurin:21-jdk
         shell: sh
         run: |
-          ./gradlew :caffeine:compileJava --no-daemon
+          for i in 1 2 3; do
+            ./gradlew :caffeine:compileJava --no-daemon && exit 0
+            echo "Attempt $i failed (possibly a transient Maven Central rate-limit); retrying in 20s..."
+            sleep 20
+          done
+          exit 1
 
       - name: Package
         uses: docker://eclipse-temurin:21-jdk
         shell: sh
         run: |
-          ./gradlew :caffeine:jar --no-daemon
+          for i in 1 2 3; do
+            ./gradlew :caffeine:jar --no-daemon && exit 0
+            echo "Attempt $i failed (possibly a transient Maven Central rate-limit); retrying in 20s..."
+            sleep 20
+          done
+          exit 1
 
       # Full :caffeine:test runs the @CacheSpec combinatorial suite, which
       # generates a huge cartesian product of cache configurations and takes
@@ -48,4 +66,9 @@ jobs:
         uses: docker://eclipse-temurin:21-jdk
         shell: sh
         run: |
-          ./gradlew :caffeine:test --no-daemon --tests "com.github.benmanes.caffeine.cache.CaffeineTest" --tests "com.github.benmanes.caffeine.cache.CaffeineSpecTest" --tests "com.github.benmanes.caffeine.cache.FrequencySketchTest" --tests "com.github.benmanes.caffeine.cache.SchedulerTest" --tests "com.github.benmanes.caffeine.cache.InternerTest" --tests "com.github.benmanes.caffeine.cache.StripedBufferTest"
+          for i in 1 2 3; do
+            ./gradlew :caffeine:test --no-daemon --tests "com.github.benmanes.caffeine.cache.CaffeineTest" --tests "com.github.benmanes.caffeine.cache.CaffeineSpecTest" --tests "com.github.benmanes.caffeine.cache.FrequencySketchTest" --tests "com.github.benmanes.caffeine.cache.SchedulerTest" --tests "com.github.benmanes.caffeine.cache.InternerTest" --tests "com.github.benmanes.caffeine.cache.StripedBufferTest" && exit 0
+            echo "Attempt $i failed (possibly a transient Maven Central rate-limit); retrying in 20s..."
+            sleep 20
+          done
+          exit 1
