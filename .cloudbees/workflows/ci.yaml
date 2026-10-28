@@ -1,0 +1,42 @@
+apiVersion: automation.cloudbees.io/v1alpha1
+kind: workflow
+name: CI
+
+on:
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    steps:
+      - name: Get source code
+        uses: cloudbees-io/checkout@v1
+
+      # Scoped to the :caffeine module only. This is a large multi-module
+      # Gradle build with a heavyweight verification suite (checkstyle,
+      # error-prone, javadoc, animalSniffer, additional TestNG conformance
+      # suites, jcstress, pitest, etc.) that isn't appropriate for a basic
+      # CI check, so we call the specific compileJava/jar/test tasks on the
+      # core module rather than the default build/check tasks. The build's
+      # own Gradle toolchain resolver (foojay-resolver-convention) downloads
+      # whatever JDK the build actually needs for compilation; this image
+      # only needs a JDK new enough to run Gradle 9 itself.
+      - name: Compile
+        uses: docker://eclipse-temurin:21-jdk
+        shell: sh
+        run: |
+          ./gradlew :caffeine:compileJava --no-daemon
+
+      - name: Package
+        uses: docker://eclipse-temurin:21-jdk
+        shell: sh
+        run: |
+          ./gradlew :caffeine:jar --no-daemon
+
+      - name: Run unit tests
+        uses: docker://eclipse-temurin:21-jdk
+        shell: sh
+        run: |
+          ./gradlew :caffeine:test --no-daemon
