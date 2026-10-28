@@ -61,10 +61,13 @@ public abstract class TextReporter implements Reporter {
   public void print(List<PolicyStats> results) {
     var sortedStats = getSortedStats(results);
     var headers = getHeaders(sortedStats);
+    if (Rox.dynamicAPI().isEnabled("enableParallelPolicyEvaluation", false)) {
+      // Send to stderr rather than the report writer: CsvReporter inherits this method, and
+      // writing this diagnostic into the writer would become the first CSV record instead of
+      // the column header, breaking consumers that parse the report output.
+      System.err.println("# policies were evaluated concurrently");
+    }
     try (var writer = makeWriter()) {
-      if (Rox.dynamicAPI().isEnabled("enableParallelPolicyEvaluation", false)) {
-        writer.write("# policies were evaluated concurrently" + System.lineSeparator());
-      }
       write(writer, headers, sortedStats);
     } catch (IOException e) {
       throw new UncheckedIOException(e);
