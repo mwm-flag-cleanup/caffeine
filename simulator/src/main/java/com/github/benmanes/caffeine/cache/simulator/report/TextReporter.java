@@ -31,6 +31,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 
+import io.rollout.rox.server.Rox;
+
 import com.github.benmanes.caffeine.cache.simulator.BasicSettings;
 import com.github.benmanes.caffeine.cache.simulator.policy.Policy.Characteristic;
 import com.github.benmanes.caffeine.cache.simulator.policy.PolicyStats;
@@ -59,6 +61,12 @@ public abstract class TextReporter implements Reporter {
   public void print(List<PolicyStats> results) {
     var sortedStats = getSortedStats(results);
     var headers = getHeaders(sortedStats);
+    if (Rox.dynamicAPI().isEnabled("enableParallelPolicyEvaluation", false)) {
+      // Send to stderr rather than the report writer: CsvReporter inherits this method, and
+      // writing this diagnostic into the writer would become the first CSV record instead of
+      // the column header, breaking consumers that parse the report output.
+      System.err.println("# policies were evaluated concurrently");
+    }
     try (var writer = makeWriter()) {
       write(writer, headers, sortedStats);
     } catch (IOException e) {

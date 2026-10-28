@@ -90,6 +90,7 @@ pitest-plugin = "1.19.0"
 pmd = "7.28.0"
 protobuf = "4.36.2"
 roseau = "0.7.0"
+rox = "6.0.0"
 slf4j = "2.0.20"
 slf4j-test = "3.0.3"
 sigstore = "2.4.0"
@@ -204,6 +205,7 @@ pmd-ant = { module = "net.sourceforge.pmd:pmd-ant", version.ref = "pmd" }
 pmd-java = { module = "net.sourceforge.pmd:pmd-java", version.ref = "pmd" }
 protobuf = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
 roseau =  { module = "io.github.alien-tools:roseau-cli", version.ref = "roseau" }
+rox = { module = "io.rollout.rox:rox-java-server", version.ref = "rox" }
 slf4j-bom = { module = "org.slf4j:slf4j-bom", version.ref = "slf4j" }
 slf4j-jdk-platform-logging = { module = "org.slf4j:slf4j-jdk-platform-logging", version.ref = "slf4j" }
 slf4j-jdk14 = { module = "org.slf4j:slf4j-jdk14", version.ref = "slf4j" }
